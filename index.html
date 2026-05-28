@@ -205,7 +205,47 @@
   .btn-outline-accent:hover { background: rgba(245,200,66,0.08); }
 
   @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ── LOADING STATE ── */
+  .lb-loading {
+    text-align: center; color: var(--muted); padding: 2rem; font-size: 0.9rem;
+  }
+  .lb-loading::after {
+    content: ''; display: inline-block; width: 16px; height: 16px;
+    border: 2px solid var(--muted); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin 0.7s linear infinite; margin-left: 8px;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>
+
+<!-- ═══════════════════════════════════════════════════════════
+     FIREBASE SETUP  (takes ~5 min — do this once)
+     ───────────────────────────────────────────────────────────
+     1. Go to https://console.firebase.google.com
+     2. Create a new project (any name, disable Analytics if asked)
+     3. Click "Realtime Database" → "Create Database" → Start in TEST mode
+     4. Click the gear icon → Project Settings → scroll down to "Your apps"
+     5. Click </> (Web) → register app → copy the firebaseConfig object below
+     6. Replace every "YOUR_..." placeholder with your actual values
+     ═══════════════════════════════════════════════════════════ -->
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+<script>
+  const firebaseConfig = {
+    apiKey:            "AIzaSyBiQp2IuYYwpH5kjKf4ZjH43OAotcxzRK0",
+    authDomain:        "spdbgame.firebaseapp.com",
+    databaseURL:       "https://spdbgame-default-rtdb.firebaseio.com",
+    projectId:         "spdbgame",
+    storageBucket:     "spdbgame.firebasestorage.app",
+    messagingSenderId: "532410416645",
+    appId:             "1:532410416645:web:52547b76c3e44b1f81266c"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+  const SCORES_REF = "music_bingo_v5_scores";
+</script>
+
 </head>
 <body>
 
@@ -275,7 +315,6 @@ const PLAY_ORDER = [
   { name: "Memory",              sub: "from Cats" },
 ];
 
-const STORAGE_KEY = "music_bingo_v5_results";
 const PENALTY_SECS = 5;
 const WRONG_LIMIT  = 3;
 
@@ -283,12 +322,13 @@ let playerName   = "";
 let myGrid       = [];
 let currentRound = 0;
 let correctCount = 0;
-let penaltyCount = 0;  // total penalty events
+let penaltyCount = 0;
 let startTime    = null;
-let penaltyTotal = 0;  // total added penalty seconds
-let timerInterval = null;
-let roundWrongStreak = 0;  // consecutive wrong taps this round
-let flashLock = false;     // prevent spam-click during flash
+let penaltyTotal = 0;
+let timerInterval   = null;
+let roundWrongStreak = 0;
+let flashLock        = false;
+let lbListener       = null;  // Firebase listener handle
 
 function show(id)  { document.getElementById(id).classList.remove("hidden"); }
 function hide(id)  { document.getElementById(id).classList.add("hidden"); }
@@ -431,10 +471,11 @@ function updateScoreBar() {
 /* ── SAVE / LEADERBOARD ── */
 function saveProgress() {
   const elapsed = Math.floor((Date.now() - startTime) / 1000) + penaltyTotal;
-  let data = {};
-  try { data = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); } catch(e) {}
-  data[playerName] = { correct: correctCount, time: elapsed, ts: Date.now() };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  db.ref(SCORES_REF + "/" + playerName).set({
+    correct: correctCount,
+    time: elapsed,
+    ts: Date.now()
+  });
 }
 
 function goToLeaderboard() {
@@ -442,48 +483,64 @@ function goToLeaderboard() {
   saveProgress();
   hide("game-screen");
   show("leaderboard-screen");
-  renderLeaderboard();
+  subscribeLeaderboard();
 }
 
-function renderLeaderboard() {
-  let data = {};
-  try { data = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); } catch(e) {}
-  const players = Object.entries(data).map(([name, v]) => ({ name, ...v }));
-  players.sort((a, b) => {
-    if (b.correct !== a.correct) return b.correct - a.correct;
-    return a.time - b.time;
-  });
+function subscribeLeaderboard() {
   const list = document.getElementById("lb-list");
-  list.innerHTML = "";
-  const medals = ["🥇","🥈","🥉"];
-  players.forEach((p, i) => {
-    const row = document.createElement("div");
-    row.className = "lb-row" + (i === 0 ? " first-place" : "");
-    const m = Math.floor(p.time / 60);
-    const s = p.time % 60;
-    const timeStr = m + ":" + String(s).padStart(2,"0");
-    const badge = i === 0 ? '<span class="winner-badge">WINNER</span>' : '';
-    row.innerHTML = `
-      <div class="lb-rank">${medals[i] || (i+1)}</div>
-      <div class="lb-name">${escHtml(p.name)}${badge}</div>
-      <div class="lb-score">
-        <div class="lb-score-num">${p.correct}<span style="font-size:0.7rem;color:var(--muted)">/9</span></div>
-        <div class="lb-score-label">correct</div>
-      </div>
-      <div class="lb-time">
-        <div class="lb-time-num">${timeStr}</div>
-        <div class="lb-time-label">total time</div>
-      </div>
-    `;
-    list.appendChild(row);
-  });
-  if (!players.length) {
-    list.innerHTML = '<div style="text-align:center;color:var(--muted);padding:2rem;font-size:0.9rem;">No results yet.</div>';
+  list.innerHTML = '<div class="lb-loading">Loading scores</div>';
+
+  // detach any previous listener first
+  if (lbListener) {
+    db.ref(SCORES_REF).off("value", lbListener);
   }
+
+  lbListener = db.ref(SCORES_REF).on("value", (snapshot) => {
+    const data = snapshot.val() || {};
+    const players = Object.entries(data).map(([name, v]) => ({ name, ...v }));
+    players.sort((a, b) => {
+      if (b.correct !== a.correct) return b.correct - a.correct;
+      return a.time - b.time;
+    });
+
+    list.innerHTML = "";
+    if (!players.length) {
+      list.innerHTML = '<div style="text-align:center;color:var(--muted);padding:2rem;font-size:0.9rem;">No results yet.</div>';
+      return;
+    }
+    const medals = ["🥇","🥈","🥉"];
+    players.forEach((p, i) => {
+      const row = document.createElement("div");
+      row.className = "lb-row" + (i === 0 ? " first-place" : "");
+      const m = Math.floor(p.time / 60);
+      const s = p.time % 60;
+      const timeStr = m + ":" + String(s).padStart(2,"0");
+      const badge = i === 0 ? '<span class="winner-badge">WINNER</span>' : '';
+      row.innerHTML = `
+        <div class="lb-rank">${medals[i] || (i+1)}</div>
+        <div class="lb-name">${escHtml(p.name)}${badge}</div>
+        <div class="lb-score">
+          <div class="lb-score-num">${p.correct}<span style="font-size:0.7rem;color:var(--muted)">/9</span></div>
+          <div class="lb-score-label">correct</div>
+        </div>
+        <div class="lb-time">
+          <div class="lb-time-num">${timeStr}</div>
+          <div class="lb-time-label">total time</div>
+        </div>
+      `;
+      list.appendChild(row);
+    });
+  });
 }
 
 function resetAll() {
-  localStorage.removeItem(STORAGE_KEY);
+  if (!confirm("Clear ALL scores and start over?")) return;
+  // detach listener before wiping data
+  if (lbListener) {
+    db.ref(SCORES_REF).off("value", lbListener);
+    lbListener = null;
+  }
+  db.ref(SCORES_REF).remove();
   hide("leaderboard-screen");
   document.getElementById("name-input").value = "";
   show("login-screen");
