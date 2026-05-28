@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎵 Music Bingo</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0e0e12;
+    --surface: #18181f;
+    --surface2: #22222c;
+    --border: rgba(255,255,255,0.08);
+    --accent: #f5c842;
+    --text: #f0ede6;
+    --muted: rgba(240,237,230,0.45);
+    --green: #3ecf72;
+    --red: #e85050;
+    --green-bg: rgba(62,207,114,0.15);
+    --red-bg: rgba(232,80,80,0.15);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; padding: 1.5rem;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(245,200,66,0.08), transparent),
+                radial-gradient(ellipse 60% 40% at 80% 110%, rgba(232,125,62,0.06), transparent);
+    pointer-events: none; z-index: 0;
+  }
+  .page { width: 100%; max-width: 680px; position: relative; z-index: 1; }
+  .hidden { display: none !important; }
+
+  /* ── LOGIN ── */
+  #login-screen { text-align: center; animation: fadeUp 0.5s ease; }
+  .logo-line {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2.2rem, 6vw, 3.2rem);
+    font-weight: 900; letter-spacing: -0.02em; line-height: 1.1; margin-bottom: 0.4rem;
+  }
+  .logo-line span { color: var(--accent); }
+  .subtitle { font-size: 0.85rem; color: var(--muted); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 2.5rem; }
+  .input-wrap { margin-bottom: 1rem; }
+  .input-wrap input {
+    width: 100%; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; color: var(--text); font-family: 'DM Sans', sans-serif;
+    font-size: 1rem; padding: 1rem 1.25rem; outline: none; transition: border-color 0.2s;
+  }
+  .input-wrap input:focus { border-color: var(--accent); }
+  .input-wrap input::placeholder { color: var(--muted); }
+  .btn-primary {
+    width: 100%; background: var(--accent); color: #0e0e12; border: none;
+    border-radius: 12px; font-family: 'DM Sans', sans-serif; font-size: 1rem;
+    font-weight: 500; padding: 1rem; cursor: pointer; transition: opacity 0.15s, transform 0.1s;
+  }
+  .btn-primary:hover { opacity: 0.9; }
+  .btn-primary:active { transform: scale(0.98); }
+
+  /* ── READY SCREEN ── */
+  #ready-screen { text-align: center; animation: fadeUp 0.45s ease; }
+  .ready-name {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(1.5rem, 5vw, 2rem);
+    font-weight: 700; margin-bottom: 0.3rem;
+  }
+  .ready-name span { color: var(--accent); }
+  .ready-hint { font-size: 0.85rem; color: var(--muted); margin-bottom: 2.5rem; }
+  .go-btn {
+    width: 100%; background: var(--accent); color: #0e0e12; border: none;
+    border-radius: 16px; font-family: 'Playfair Display', serif;
+    font-size: 2rem; font-weight: 900; padding: 1.25rem 1rem;
+    cursor: pointer; letter-spacing: 0.05em;
+    transition: opacity 0.15s, transform 0.12s;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  .go-btn:hover { opacity: 0.92; }
+  .go-btn:active { transform: scale(0.97); }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(245,200,66,0.35); }
+    50%       { box-shadow: 0 0 0 16px rgba(245,200,66,0); }
+  }
+  .ready-songs {
+    margin-top: 2rem; display: grid; grid-template-columns: repeat(3,1fr); gap: 6px;
+  }
+  .ready-pill {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 0.45rem 0.5rem; font-size: 0.7rem; color: var(--muted);
+    text-align: center; line-height: 1.35;
+  }
+
+  /* ── GAME ── */
+  #game-screen { animation: fadeUp 0.4s ease; }
+  .game-header {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;
+  }
+  .player-name { font-family: 'Playfair Display', serif; font-size: 1.3rem; font-weight: 700; }
+  .player-name span { color: var(--accent); }
+  .timer-badge {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 0.4rem 0.9rem; font-size: 0.85rem; color: var(--muted); font-variant-numeric: tabular-nums;
+  }
+  .timer-badge b { color: var(--accent); font-weight: 500; }
+  .timer-badge.penalty { border-color: var(--red); }
+  .timer-badge.penalty b { color: var(--red); }
+
+  .now-playing-bar {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 0.8rem 1rem; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 12px;
+  }
+  .eq-anim { display: flex; align-items: flex-end; gap: 2px; height: 16px; flex-shrink: 0; }
+  .eq-bar { width: 3px; background: var(--accent); border-radius: 2px; animation: eq 0.6s ease-in-out infinite alternate; }
+  .eq-bar:nth-child(2) { animation-delay: 0.15s; }
+  .eq-bar:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes eq { from { height: 4px; } to { height: 14px; } }
+  .now-playing-text { flex: 1; }
+  .now-playing-label { font-size: 0.7rem; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 2px; }
+  .now-playing-round { font-size: 0.95rem; font-weight: 500; color: var(--text); }
+  .now-playing-round span { color: var(--accent); }
+
+  /* penalty toast */
+  .penalty-toast {
+    background: var(--red-bg); border: 1px solid var(--red); border-radius: 10px;
+    padding: 0.6rem 1rem; margin-bottom: 1rem; text-align: center;
+    font-size: 0.85rem; color: var(--red); font-weight: 500;
+    animation: fadeUp 0.25s ease;
+  }
+
+  .bingo-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 1.25rem;
+  }
+  .bingo-cell {
+    aspect-ratio: 1; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; text-align: center; cursor: pointer; padding: 0.6rem;
+    transition: border-color 0.2s, background 0.2s, transform 0.12s;
+    user-select: none; position: relative; overflow: hidden;
+  }
+  .bingo-cell:hover:not(.locked) { border-color: rgba(245,200,66,0.45); background: var(--surface2); }
+  .bingo-cell:active:not(.locked) { transform: scale(0.95); }
+  .bingo-cell.correct { background: var(--green-bg); border-color: var(--green); cursor: default; }
+  .bingo-cell.flash-wrong {
+    background: var(--red-bg); border-color: var(--red);
+    animation: flashRed 0.5s ease forwards;
+  }
+  .bingo-cell.locked { cursor: default; }
+  @keyframes flashRed {
+    0%   { background: var(--red-bg); border-color: var(--red); }
+    100% { background: var(--surface); border-color: var(--border); }
+  }
+  .cell-name { font-size: 0.82rem; font-weight: 500; line-height: 1.3; color: var(--text); }
+  .cell-sub  { font-size: 0.62rem; color: var(--muted); margin-top: 4px; line-height: 1.2; }
+  .cell-verdict {
+    position: absolute; top: 6px; right: 8px; font-size: 0.8rem; font-weight: 500; color: var(--green); opacity: 0;
+  }
+  .bingo-cell.correct .cell-verdict { opacity: 1; }
+
+  .score-bar {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 0.75rem 1rem; display: flex; justify-content: space-between;
+    font-size: 0.85rem; color: var(--muted); margin-bottom: 1rem;
+  }
+  .score-bar b { color: var(--text); font-weight: 500; }
+  .btn-secondary {
+    width: 100%; background: transparent; border: 1px solid var(--border); border-radius: 12px;
+    color: var(--muted); font-family: 'DM Sans', sans-serif; font-size: 0.9rem;
+    padding: 0.85rem; cursor: pointer; transition: border-color 0.2s, color 0.2s;
+  }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── LEADERBOARD ── */
+  #leaderboard-screen { animation: fadeUp 0.5s ease; }
+  .lb-header { text-align: center; margin-bottom: 2rem; }
+  .lb-header h2 { font-family: 'Playfair Display', serif; font-size: 2rem; font-weight: 900; }
+  .lb-header p { font-size: 0.8rem; color: var(--muted); margin-top: 0.3rem; }
+  .lb-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 2rem; }
+  .lb-row {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 0.9rem 1.1rem; display: grid;
+    grid-template-columns: 2rem 1fr auto auto; align-items: center; gap: 10px;
+  }
+  .lb-row.first-place { border-color: var(--accent); background: rgba(245,200,66,0.05); }
+  .lb-rank { font-family: 'Playfair Display', serif; font-size: 1.1rem; font-weight: 700; color: var(--muted); text-align: center; }
+  .lb-row.first-place .lb-rank { color: var(--accent); }
+  .lb-name { font-weight: 500; font-size: 0.95rem; }
+  .winner-badge {
+    display: inline-block; background: var(--accent); color: #0e0e12; font-size: 0.6rem;
+    font-weight: 500; padding: 2px 7px; border-radius: 6px; margin-left: 6px;
+    vertical-align: middle; letter-spacing: 0.05em;
+  }
+  .lb-score { text-align: right; }
+  .lb-score-num { font-size: 1.1rem; font-weight: 500; color: var(--green); }
+  .lb-score-label { font-size: 0.65rem; color: var(--muted); }
+  .lb-time { text-align: right; }
+  .lb-time-num { font-size: 0.9rem; font-weight: 500; color: var(--muted); }
+  .lb-time-label { font-size: 0.65rem; color: var(--muted); }
+  .btn-outline-accent {
+    width: 100%; background: transparent; border: 1px solid var(--accent); border-radius: 12px;
+    color: var(--accent); font-family: 'DM Sans', sans-serif; font-size: 0.9rem;
+    padding: 0.9rem; cursor: pointer; transition: background 0.15s;
+  }
+  .btn-outline-accent:hover { background: rgba(245,200,66,0.08); }
+
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="page" id="login-screen">
+  <div class="logo-line">Music <span>Bingo</span></div>
+  <div class="subtitle">Office Birthday Party Edition</div>
+  <div class="input-wrap">
+    <input type="text" id="name-input" placeholder="Enter your name..." maxlength="24" autocomplete="off"/>
+  </div>
+  <button class="btn-primary" onclick="goToReady()">Confirm →</button>
+</div>
+
+<!-- READY -->
+<div class="page hidden" id="ready-screen">
+  <div class="ready-name">Ready, <span id="ready-name-display"></span>?</div>
+  <div class="ready-hint">Wait for the host to say "Go!" — then press the button below</div>
+  <button class="go-btn" onclick="startGame()">GO!</button>
+  <div class="ready-songs" id="ready-songs-list"></div>
+</div>
+
+<!-- GAME -->
+<div class="page hidden" id="game-screen">
+  <div class="game-header">
+    <div class="player-name">Hi, <span id="display-name"></span></div>
+    <div class="timer-badge" id="timer-badge">Time: <b id="timer-display">0:00</b></div>
+  </div>
+  <div class="now-playing-bar">
+    <div class="eq-anim" aria-hidden="true">
+      <div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div>
+    </div>
+    <div class="now-playing-text">
+      <div class="now-playing-label">Now playing — Song</div>
+      <div class="now-playing-round">Round <span id="round-num">1</span> of 9 — Tap the matching cell!</div>
+    </div>
+  </div>
+  <div id="penalty-area"></div>
+  <div class="bingo-grid" id="bingo-grid"></div>
+  <div class="score-bar">
+    <span>Correct: <b id="score-correct">0</b> / 9</span>
+    <span>Penalties: <b id="score-penalty">0</b></span>
+    <span>Remaining: <b id="score-remaining">9</b></span>
+  </div>
+  <button class="btn-secondary" onclick="goToLeaderboard()">Next Page → Results</button>
+</div>
+
+<!-- LEADERBOARD -->
+<div class="page hidden" id="leaderboard-screen">
+  <div class="lb-header">
+    <h2>🏆 Final Results</h2>
+    <p>Ranked by correct answers · tiebreak by fastest time</p>
+  </div>
+  <div class="lb-list" id="lb-list"></div>
+  <button class="btn-outline-accent" onclick="resetAll()">Play Again ↺</button>
+</div>
+
+<script>
+const PLAY_ORDER = [
+  { name: "Billie Jean",         sub: "Michael Jackson" },
+  { name: "We Will Rock You",    sub: "Queen" },
+  { name: "Love Story",          sub: "Taylor Swift" },
+  { name: "Hotel California",    sub: "Eagles" },
+  { name: "My Heart Will Go On", sub: "Céline Dion" },
+  { name: "茉莉花",               sub: "Jasmine Flower" },
+  { name: "吻别",                 sub: "Goodbye Kiss" },
+  { name: "月亮代表我的心",        sub: "The Moon Represents My Heart" },
+  { name: "Memory",              sub: "from Cats" },
+];
+
+const STORAGE_KEY = "music_bingo_v5_results";
+const PENALTY_SECS = 5;
+const WRONG_LIMIT  = 3;
+
+let playerName   = "";
+let myGrid       = [];
+let currentRound = 0;
+let correctCount = 0;
+let penaltyCount = 0;  // total penalty events
+let startTime    = null;
+let penaltyTotal = 0;  // total added penalty seconds
+let timerInterval = null;
+let roundWrongStreak = 0;  // consecutive wrong taps this round
+let flashLock = false;     // prevent spam-click during flash
+
+function show(id)  { document.getElementById(id).classList.remove("hidden"); }
+function hide(id)  { document.getElementById(id).classList.add("hidden"); }
+
+function shuffle(arr) {
+  let a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/* ── LOGIN → READY ── */
+function goToReady() {
+  const val = document.getElementById("name-input").value.trim();
+  if (!val) { document.getElementById("name-input").focus(); return; }
+  playerName = val;
+  myGrid = shuffle([...PLAY_ORDER]);
+  document.getElementById("ready-name-display").textContent = playerName;
+  // populate song preview on ready screen
+  const wrap = document.getElementById("ready-songs-list");
+  wrap.innerHTML = "";
+  PLAY_ORDER.forEach(s => {
+    const pill = document.createElement("div");
+    pill.className = "ready-pill";
+    pill.textContent = s.name;
+    wrap.appendChild(pill);
+  });
+  hide("login-screen");
+  show("ready-screen");
+}
+
+/* ── READY → GAME ── */
+function startGame() {
+  currentRound = 0; correctCount = 0; penaltyCount = 0;
+  penaltyTotal = 0; roundWrongStreak = 0; flashLock = false;
+  document.getElementById("display-name").textContent = playerName;
+  renderGrid();
+  updateRoundDisplay();
+  hide("ready-screen");
+  show("game-screen");
+  startTime = Date.now();
+  timerInterval = setInterval(updateTimer, 200);
+}
+
+/* ── TIMER ── */
+function updateTimer() {
+  const raw = Math.floor((Date.now() - startTime) / 1000) + penaltyTotal;
+  const m = Math.floor(raw / 60);
+  const s = raw % 60;
+  document.getElementById("timer-display").textContent = m + ":" + String(s).padStart(2,"0");
+}
+
+function updateRoundDisplay() {
+  document.getElementById("round-num").textContent = Math.min(currentRound + 1, 9);
+}
+
+/* ── GRID ── */
+function renderGrid() {
+  const grid = document.getElementById("bingo-grid");
+  grid.innerHTML = "";
+  myGrid.forEach((song, i) => {
+    const cell = document.createElement("div");
+    cell.className = "bingo-cell";
+    cell.id = "cell-" + i;
+    cell.innerHTML = `
+      <div class="cell-name">${escHtml(song.name)}</div>
+      <div class="cell-sub">${escHtml(song.sub)}</div>
+      <div class="cell-verdict">✓</div>
+    `;
+    cell.onclick = () => handleCellClick(i);
+    grid.appendChild(cell);
+  });
+  updateScoreBar();
+  document.getElementById("penalty-area").innerHTML = "";
+}
+
+/* ── CELL CLICK ── */
+function handleCellClick(gridIdx) {
+  if (currentRound >= 9) return;
+  if (flashLock) return;
+  const cell = document.getElementById("cell-" + gridIdx);
+  if (cell.classList.contains("locked")) return;
+
+  const correctSong = PLAY_ORDER[currentRound];
+  const clickedSong = myGrid[gridIdx];
+  const isCorrect   = clickedSong.name === correctSong.name;
+
+  if (isCorrect) {
+    // Mark correct — lock forever
+    cell.classList.add("correct", "locked");
+    correctCount++;
+    roundWrongStreak = 0;
+    currentRound++;
+    updateScoreBar();
+    updateRoundDisplay();
+    saveProgress();
+  } else {
+    // Flash red then revert — do NOT lock
+    roundWrongStreak++;
+    flashLock = true;
+    cell.classList.add("flash-wrong");
+    setTimeout(() => {
+      cell.classList.remove("flash-wrong");
+      flashLock = false;
+    }, 520);
+
+    // Check for 3-wrong penalty
+    if (roundWrongStreak >= WRONG_LIMIT) {
+      roundWrongStreak = 0;
+      penaltyCount++;
+      penaltyTotal += PENALTY_SECS;
+      updateScoreBar();
+      showPenaltyToast();
+    }
+  }
+}
+
+function showPenaltyToast() {
+  const area = document.getElementById("penalty-area");
+  const toast = document.createElement("div");
+  toast.className = "penalty-toast";
+  toast.textContent = "⚠️ 3 wrong answers — +5 sec penalty!";
+  area.innerHTML = "";
+  area.appendChild(toast);
+  setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 2500);
+  // flash timer badge
+  const badge = document.getElementById("timer-badge");
+  badge.classList.add("penalty");
+  setTimeout(() => badge.classList.remove("penalty"), 1500);
+}
+
+function updateScoreBar() {
+  document.getElementById("score-correct").textContent  = correctCount;
+  document.getElementById("score-penalty").textContent  = penaltyCount;
+  document.getElementById("score-remaining").textContent = 9 - correctCount;
+}
+
+/* ── SAVE / LEADERBOARD ── */
+function saveProgress() {
+  const elapsed = Math.floor((Date.now() - startTime) / 1000) + penaltyTotal;
+  let data = {};
+  try { data = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); } catch(e) {}
+  data[playerName] = { correct: correctCount, time: elapsed, ts: Date.now() };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+function goToLeaderboard() {
+  clearInterval(timerInterval);
+  saveProgress();
+  hide("game-screen");
+  show("leaderboard-screen");
+  renderLeaderboard();
+}
+
+function renderLeaderboard() {
+  let data = {};
+  try { data = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); } catch(e) {}
+  const players = Object.entries(data).map(([name, v]) => ({ name, ...v }));
+  players.sort((a, b) => {
+    if (b.correct !== a.correct) return b.correct - a.correct;
+    return a.time - b.time;
+  });
+  const list = document.getElementById("lb-list");
+  list.innerHTML = "";
+  const medals = ["🥇","🥈","🥉"];
+  players.forEach((p, i) => {
+    const row = document.createElement("div");
+    row.className = "lb-row" + (i === 0 ? " first-place" : "");
+    const m = Math.floor(p.time / 60);
+    const s = p.time % 60;
+    const timeStr = m + ":" + String(s).padStart(2,"0");
+    const badge = i === 0 ? '<span class="winner-badge">WINNER</span>' : '';
+    row.innerHTML = `
+      <div class="lb-rank">${medals[i] || (i+1)}</div>
+      <div class="lb-name">${escHtml(p.name)}${badge}</div>
+      <div class="lb-score">
+        <div class="lb-score-num">${p.correct}<span style="font-size:0.7rem;color:var(--muted)">/9</span></div>
+        <div class="lb-score-label">correct</div>
+      </div>
+      <div class="lb-time">
+        <div class="lb-time-num">${timeStr}</div>
+        <div class="lb-time-label">total time</div>
+      </div>
+    `;
+    list.appendChild(row);
+  });
+  if (!players.length) {
+    list.innerHTML = '<div style="text-align:center;color:var(--muted);padding:2rem;font-size:0.9rem;">No results yet.</div>';
+  }
+}
+
+function resetAll() {
+  localStorage.removeItem(STORAGE_KEY);
+  hide("leaderboard-screen");
+  document.getElementById("name-input").value = "";
+  show("login-screen");
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+document.getElementById("name-input").addEventListener("keydown", e => {
+  if (e.key === "Enter") goToReady();
+});
+</script>
+</body>
+</html>
